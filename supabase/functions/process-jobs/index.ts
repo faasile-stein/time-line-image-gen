@@ -269,44 +269,10 @@ async function processVideoJob(inputData: any) {
 
   const runwayData = await runwayResponse.json()
   
-  // Now we need to poll for the task completion
-  let taskId = runwayData.id
-  let videoUrl = null
-  let attempts = 0
-  const maxAttempts = 180 // 15 minutes with 5-second intervals
-  
-  while (attempts < maxAttempts) {
-    await new Promise(resolve => setTimeout(resolve, 5000)) // Wait 5 seconds
-    
-    const statusResponse = await fetch(`https://api.dev.runwayml.com/v1/tasks/${taskId}`, {
-      headers: {
-        'Authorization': `Bearer ${RUNWAY_API_KEY}`,
-        'X-Runway-Version': '2024-11-06'
-      }
-    })
-    
-    if (statusResponse.ok) {
-      const statusData = await statusResponse.json()
-      
-      if (statusData.status === 'SUCCEEDED') {
-        videoUrl = statusData.output?.[0]?.url
-        break
-      } else if (statusData.status === 'FAILED') {
-        throw new Error(`Runway task failed: ${statusData.failure?.message || 'Unknown error'}`)
-      }
-    }
-    
-    attempts++
-  }
-  
-  if (!videoUrl) {
-    throw new Error('Video generation timed out')
-  }
-
+  // Return immediately with the task ID - polling will happen separately
   return {
-    taskId,
-    videoUrl,
-    status: 'completed',
+    taskId: runwayData.id,
+    status: 'processing',
     videoPrompt
   }
 }

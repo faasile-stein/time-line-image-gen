@@ -71,6 +71,54 @@ export const supabaseFunctions = {
     })
   },
 
+  // Special polling for video generation with Runway ML
+  async pollVideoStatus(jobId: string, taskId: string, onUpdate?: (job: Job) => void): Promise<Job> {
+    return new Promise((resolve, reject) => {
+      const poll = async () => {
+        try {
+          // First check if the job is already completed in our database
+          const job = await this.getJobStatus(jobId)
+          onUpdate?.(job)
+          
+          if (job.status === 'completed') {
+            resolve(job)
+            return
+          } else if (job.status === 'failed') {
+            reject(new Error(job.errorMessage || 'Job failed'))
+            return
+          }
+          
+          // Poll Runway ML for status
+          const { data, error } = await supabase.functions.invoke('poll-runway-status', {
+            body: { taskId, jobId }
+          })
+          
+          if (error) {
+            console.error('Error polling Runway status:', error)
+            setTimeout(poll, 5000) // Try again in 5 seconds
+            return
+          }
+          
+          if (data.status === 'completed') {
+            // Job should be updated, poll our database once more
+            const updatedJob = await this.getJobStatus(jobId)
+            onUpdate?.(updatedJob)
+            resolve(updatedJob)
+          } else if (data.status === 'failed') {
+            reject(new Error(data.error || 'Video generation failed'))
+          } else {
+            // Still processing, continue polling
+            setTimeout(poll, 5000) // Poll every 5 seconds for video
+          }
+        } catch (error) {
+          reject(error)
+        }
+      }
+      
+      poll()
+    })
+  },
+
   // High-level async functions
   async getStyles(trackArtist: string, trackName: string) {
     // Create job
@@ -109,7 +157,13 @@ export const supabaseFunctions = {
   ) {
     const { jobId } = await this.createJob('generate-video', { imageUrl, prompt, trackName, bpm, phase, style })
     this.processJob(jobId).catch(console.error)
-    const job = await this.pollJobStatus(jobId, onUpdate)
+    
+    // First, wait for the job to start processing and get the task ID
+    const initialJob = await this.pollJobStatus(jobId, onUpdate)
+    const taskId = initialJob.outputData.taskId
+    
+    // Then use special video polling that checks Runway ML directly
+    const job = await this.pollVideoStatus(jobId, taskId, onUpdate)
     return job.outputData as { taskId: string; videoUrl: string; status: string; videoPrompt: string }
   }
 }
