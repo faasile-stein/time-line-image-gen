@@ -9,13 +9,13 @@ type Phase = 'intro' | 'buildup' | 'drop' | 'breakdown' | 'outro';
 type Style = string;
 
 interface TrackInfo {
-  number: string;
+  artist: string;
   name: string;
 }
 
 export default function Home() {
   const [step, setStep] = useState<'track' | 'styles' | 'phase' | 'image' | 'video'>('track');
-  const [trackInfo, setTrackInfo] = useState<TrackInfo>({ number: '', name: '' });
+  const [trackInfo, setTrackInfo] = useState<TrackInfo>({ artist: '', name: '' });
   const [suggestedStyles, setSuggestedStyles] = useState<Style[]>([]);
   const [selectedStyle, setSelectedStyle] = useState<Style>('');
   const [bpm, setBpm] = useState<number>(0);
@@ -23,19 +23,20 @@ export default function Home() {
   const [selectedPhase, setSelectedPhase] = useState<Phase | null>(null);
   const [imagePrompt, setImagePrompt] = useState('');
   const [generatedImage, setGeneratedImage] = useState<string>('');
+  const [generatedVideo, setGeneratedVideo] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [currentJob, setCurrentJob] = useState<Job | null>(null);
   const [progressMessage, setProgressMessage] = useState('');
 
   const handleTrackSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!trackInfo.number || !trackInfo.name) return;
+    if (!trackInfo.artist || !trackInfo.name) return;
     
     setIsLoading(true);
     setProgressMessage('Getting AI style suggestions...');
     
     try {
-      const styles = await supabaseFunctions.getStyles(trackInfo.number, trackInfo.name);
+      const styles = await supabaseFunctions.getStyles(trackInfo.artist, trackInfo.name);
       setSuggestedStyles(styles);
       setStep('styles');
     } catch (error) {
@@ -74,13 +75,13 @@ export default function Home() {
     setProgressMessage('Creating enhanced prompt...');
     
     try {
-      const prompt = `A stunning visual for a DJ set during the ${phase} phase of "${trackInfo.name}" at ${bpm} BPM in ${selectedStyle} style`;
+      const prompt = `Abstract background visual for the ${phase} phase of "${trackInfo.name}" at ${bpm} BPM in ${selectedStyle} style. No people, no DJ, no stage - pure visual elements only.`;
       setImagePrompt(prompt);
       
       const imageData = await supabaseFunctions.generateImage(prompt, false, (job) => {
         setCurrentJob(job);
         if (job.status === 'processing') {
-          setProgressMessage('Generating image with DALL-E 3...');
+          setProgressMessage('Generating image... (up to 2 minutes)');
         }
       });
       
@@ -114,11 +115,12 @@ export default function Home() {
         (job) => {
           setCurrentJob(job);
           if (job.status === 'processing') {
-            setProgressMessage('Generating video with Runway ML...');
+            setProgressMessage('Generating video... (up to 15 minutes)');
           }
         }
       );
       
+      setGeneratedVideo(videoData.videoUrl);
       setStep('video');
     } catch (error) {
       console.error('Error generating video:', error);
@@ -136,10 +138,14 @@ export default function Home() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-12"
+          className="text-center mb-16"
         >
-          <h1 className="text-4xl font-bold mb-4">time-line.io Visual Generator</h1>
-          <p className="text-lg text-muted-foreground">Create stunning AI-powered visuals for your DJ sets</p>
+          <h1 className="text-5xl md:text-6xl font-hero font-bold mb-6 leading-tight">
+            time-line.io Visual Generator
+          </h1>
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+            Create stunning visuals for your DJ sets with AI-powered generation
+          </p>
         </motion.div>
 
         <div className="max-w-4xl mx-auto">
@@ -173,24 +179,24 @@ export default function Home() {
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              className="bg-card p-8 rounded-lg shadow-lg"
+              className="bg-card p-8 rounded-xl border border-border shadow-lg"
             >
-              <h2 className="text-2xl font-semibold mb-6 flex items-center gap-2">
-                <Music className="w-6 h-6" />
+              <h2 className="text-3xl font-hero font-semibold mb-8 flex items-center gap-3">
+                <Music className="w-8 h-8 text-primary" />
                 Track Information
               </h2>
               <form onSubmit={handleTrackSubmit} className="space-y-4">
                 <div>
-                  <label htmlFor="track-number" className="block text-sm font-medium mb-2">
-                    Track Number
+                  <label htmlFor="track-artist" className="block text-sm font-medium mb-2">
+                    Artist
                   </label>
                   <input
-                    id="track-number"
+                    id="track-artist"
                     type="text"
-                    value={trackInfo.number}
-                    onChange={(e) => setTrackInfo({ ...trackInfo, number: e.target.value })}
-                    className="w-full px-4 py-2 rounded-md bg-background border border-input focus:border-primary focus:outline-none"
-                    placeholder="e.g., 001"
+                    value={trackInfo.artist}
+                    onChange={(e) => setTrackInfo({ ...trackInfo, artist: e.target.value })}
+                    className="w-full px-4 py-3 rounded-lg bg-background border border-input focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                    placeholder="e.g., Deadmau5"
                     required
                   />
                 </div>
@@ -203,7 +209,7 @@ export default function Home() {
                     type="text"
                     value={trackInfo.name}
                     onChange={(e) => setTrackInfo({ ...trackInfo, name: e.target.value })}
-                    className="w-full px-4 py-2 rounded-md bg-background border border-input focus:border-primary focus:outline-none"
+                    className="w-full px-4 py-3 rounded-lg bg-background border border-input focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
                     placeholder="e.g., Midnight Dreams"
                     required
                   />
@@ -211,7 +217,7 @@ export default function Home() {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full bg-primary text-primary-foreground py-3 rounded-md font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full bg-primary text-primary-foreground py-4 rounded-lg font-medium hover:bg-primary/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg"
                 >
                   {isLoading ? (
                     <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
@@ -227,10 +233,10 @@ export default function Home() {
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              className="bg-card p-8 rounded-lg shadow-lg"
+              className="bg-card p-8 rounded-xl border border-border shadow-lg"
             >
-              <h2 className="text-2xl font-semibold mb-6 flex items-center gap-2">
-                <Palette className="w-6 h-6" />
+              <h2 className="text-3xl font-hero font-semibold mb-8 flex items-center gap-3">
+                <Palette className="w-8 h-8 text-primary" />
                 Select Visual Style
               </h2>
               <div className="space-y-3">
@@ -241,14 +247,18 @@ export default function Home() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.1 }}
                     onClick={() => handleStyleSelect(style)}
-                    className="w-full p-4 rounded-md bg-background border border-input hover:border-primary hover:bg-accent transition-all text-left group"
+                    className={`w-full p-6 rounded-lg transition-all text-left group ${
+                      style === 'Rainbow Vomit' 
+                        ? 'rainbow-vomit-bg border-2 border-accent hover:scale-105 shadow-lg shadow-accent/25' 
+                        : 'bg-card border border-border hover:border-primary hover:bg-accent/10'
+                    }`}
                   >
                     <span className="font-medium group-hover:text-primary transition-colors">
                       {style}
                     </span>
                     {style === 'Rainbow Vomit' && (
-                      <span className="ml-2 text-xs bg-primary/20 text-primary px-2 py-1 rounded-full">
-                        🌈 Special
+                      <span className="ml-2 text-xs bg-accent text-accent-foreground px-3 py-1 rounded-full font-bold animate-pulse">
+                        🌈 RAINBOW VOMIT 🌈
                       </span>
                     )}
                   </motion.button>
@@ -261,10 +271,10 @@ export default function Home() {
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              className="bg-card p-8 rounded-lg shadow-lg"
+              className="bg-card p-8 rounded-xl border border-border shadow-lg"
             >
-              <h2 className="text-2xl font-semibold mb-2">Select Song Phase</h2>
-              <p className="text-muted-foreground mb-6">BPM: {bpm}</p>
+              <h2 className="text-3xl font-hero font-semibold mb-4">Select Song Phase</h2>
+              <p className="text-muted-foreground mb-8 text-lg">BPM: <span className="text-primary font-semibold">{bpm}</span></p>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 {phases.map((phase) => (
                   <motion.button
@@ -272,7 +282,7 @@ export default function Home() {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => handlePhaseSelect(phase)}
-                    className="p-4 rounded-md bg-background border border-input hover:border-primary hover:bg-accent transition-all capitalize font-medium"
+                    className="p-4 rounded-lg bg-card border border-border hover:border-primary hover:bg-accent/10 transition-all capitalize font-medium"
                   >
                     {phase}
                   </motion.button>
@@ -285,14 +295,14 @@ export default function Home() {
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              className="bg-card p-8 rounded-lg shadow-lg"
+              className="bg-card p-8 rounded-xl border border-border shadow-lg"
             >
-              <h2 className="text-2xl font-semibold mb-6 flex items-center gap-2">
-                <ImageIcon className="w-6 h-6" />
+              <h2 className="text-3xl font-hero font-semibold mb-8 flex items-center gap-3">
+                <ImageIcon className="w-8 h-8 text-primary" />
                 Generated Image
               </h2>
               <div className="space-y-4">
-                <div className="bg-background p-4 rounded-md">
+                <div className="bg-background p-4 rounded-lg border border-border">
                   <p className="text-sm text-muted-foreground mb-2">Prompt:</p>
                   <textarea
                     value={imagePrompt}
@@ -301,15 +311,6 @@ export default function Home() {
                     rows={3}
                   />
                 </div>
-                {generatedImage && (
-                  <div className="aspect-video bg-muted rounded-md overflow-hidden">
-                    <img
-                      src={generatedImage}
-                      alt="Generated visual"
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                )}
                 <div className="flex gap-4">
                   <button
                     onClick={async () => {
@@ -319,7 +320,7 @@ export default function Home() {
                         const imageData = await supabaseFunctions.generateImage(imagePrompt, true, (job) => {
                           setCurrentJob(job);
                           if (job.status === 'processing') {
-                            setProgressMessage('Regenerating with DALL-E 3...');
+                            setProgressMessage('Regenerating image... (up to 2 minutes)');
                           }
                         });
                         setGeneratedImage(imageData.imageUrl);
@@ -333,14 +334,14 @@ export default function Home() {
                       }
                     }}
                     disabled={isLoading}
-                    className="flex-1 bg-secondary text-secondary-foreground py-3 rounded-md font-medium hover:bg-secondary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 bg-secondary text-secondary-foreground py-3 rounded-lg font-medium hover:bg-secondary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isLoading ? 'Regenerating...' : 'Regenerate'}
                   </button>
                   <button
                     onClick={handleGenerateVideo}
                     disabled={isLoading}
-                    className="flex-1 bg-primary text-primary-foreground py-3 rounded-md font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    className="flex-1 bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     {isLoading ? (
                       <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
@@ -349,6 +350,15 @@ export default function Home() {
                     )}
                   </button>
                 </div>
+                {generatedImage && (
+                  <div className="aspect-video bg-muted rounded-lg overflow-hidden">
+                    <img
+                      src={generatedImage}
+                      alt="Generated visual"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
               </div>
             </motion.div>
           )}
@@ -357,16 +367,49 @@ export default function Home() {
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              className="bg-card p-8 rounded-lg shadow-lg text-center"
+              className="bg-card p-8 rounded-xl border border-border shadow-lg"
             >
-              <Video className="w-16 h-16 mx-auto mb-4 text-primary" />
-              <h2 className="text-2xl font-semibold mb-4">Video Generation in Progress</h2>
-              <p className="text-muted-foreground mb-6">
-                Your video is being generated with Runway ML. This may take a few minutes...
-              </p>
-              <div className="flex justify-center">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              </div>
+              <h2 className="text-3xl font-hero font-semibold mb-8 flex items-center gap-3">
+                <Video className="w-8 h-8 text-primary" />
+                Generated Video
+              </h2>
+              {generatedVideo ? (
+                <div className="space-y-4">
+                  <div className="aspect-video bg-muted rounded-lg overflow-hidden">
+                    <video
+                      src={generatedVideo}
+                      controls
+                      className="w-full h-full object-cover"
+                      preload="metadata"
+                    />
+                  </div>
+                  <div className="flex gap-4">
+                    <button
+                      onClick={() => setStep('track')}
+                      className="flex-1 bg-secondary text-secondary-foreground py-3 rounded-lg font-medium hover:bg-secondary/90 transition-colors"
+                    >
+                      Create Another
+                    </button>
+                    <button
+                      onClick={() => window.open(generatedVideo, '_blank')}
+                      className="flex-1 bg-primary text-primary-foreground py-3 rounded-lg font-medium hover:bg-primary/90 transition-colors"
+                    >
+                      Download Video
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <Video className="w-16 h-16 mx-auto mb-4 text-primary" />
+                  <h3 className="text-xl font-semibold mb-4">Video Generation in Progress</h3>
+                  <p className="text-muted-foreground mb-6">
+                    Your video is being generated. This can take up to 15 minutes...
+                  </p>
+                  <div className="flex justify-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  </div>
+                </div>
+              )}
             </motion.div>
           )}
         </div>

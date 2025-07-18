@@ -72,9 +72,9 @@ export const supabaseFunctions = {
   },
 
   // High-level async functions
-  async getStyles(trackNumber: string, trackName: string) {
+  async getStyles(trackArtist: string, trackName: string) {
     // Create job
-    const { jobId } = await this.createJob('get-styles', { trackNumber, trackName })
+    const { jobId } = await this.createJob('get-styles', { trackArtist, trackName })
     
     // Start processing (fire and forget)
     this.processJob(jobId).catch(console.error)
@@ -110,6 +110,6 @@ export const supabaseFunctions = {
     const { jobId } = await this.createJob('generate-video', { imageUrl, prompt, trackName, bpm, phase, style })
     this.processJob(jobId).catch(console.error)
     const job = await this.pollJobStatus(jobId, onUpdate)
-    return job.outputData as { taskId: string; status: string; videoPrompt: string }
+    return job.outputData as { taskId: string; videoUrl: string; status: string; videoPrompt: string }
   }
 }

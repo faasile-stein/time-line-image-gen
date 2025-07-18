@@ -8,11 +8,11 @@ const corsHeaders = {
 }
 
 async function processStylesJob(inputData: any) {
-  const { trackNumber, trackName } = inputData
+  const { trackArtist, trackName } = inputData
   const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')
 
   const prompt = `You are helping a DJ create stunning visuals for their set. 
-  Given the track "${trackName}" (Track #${trackNumber}), suggest 5 unique and creative visual styles.
+  Given the track "${trackName}" by ${trackArtist}, suggest 5 unique and creative visual styles.
   Each style should be visually distinct and suitable for live DJ performance visuals.
   Always include "Rainbow Vomit" as the 5th option.
   
@@ -113,11 +113,11 @@ async function processImageJob(inputData: any) {
         messages: [
           {
             role: 'system',
-            content: 'You are an expert at creating detailed image prompts for AI art generation. Enhance the given prompt with rich visual details, lighting, composition, and artistic style while keeping it under 1000 characters.'
+            content: 'You are an expert at creating detailed image prompts for AI art generation. Enhance the given prompt with rich visual details, lighting, composition, and artistic style while keeping it under 1000 characters. IMPORTANT: Do not include any DJs, stages, performers, or people in the visual. Focus on abstract visuals, colors, patterns, and atmospheric elements that would work as background visuals.'
           },
           {
             role: 'user',
-            content: `Enhance this prompt for a DJ visual: ${prompt}`
+            content: `Enhance this prompt for a background visual (no people, no DJ, no stage): ${prompt}`
           }
         ],
         temperature: 0.7,
@@ -131,32 +131,63 @@ async function processImageJob(inputData: any) {
     }
   }
 
-  // Generate the image
-  const imageResponse = await fetch('https://api.openai.com/v1/images/generations', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${OPENAI_API_KEY}`
-    },
-    body: JSON.stringify({
-      model: 'gpt-image-1',
-      prompt: enhancedPrompt,
-      n: 1,
-      size: '1792x1024',
-      quality: 'hd',
-      moderation: 'auto'
+  // Try gpt-image-1 first, then fall back to dall-e-3
+  let imageData
+  let modelUsed = 'gpt-image-1'
+  
+  try {
+    const imageResponse = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-image-1',
+        prompt: enhancedPrompt,
+        n: 1,
+        size: '1792x1024',
+        quality: 'hd',
+        moderation: 'auto'
+      })
     })
-  })
 
-  if (!imageResponse.ok) {
-    throw new Error(`OpenAI API error: ${imageResponse.statusText}`)
+    if (imageResponse.ok) {
+      imageData = await imageResponse.json()
+    } else {
+      throw new Error(`gpt-image-1 failed: ${imageResponse.statusText}`)
+    }
+  } catch (error) {
+    console.log('gpt-image-1 failed, falling back to dall-e-3:', error.message)
+    modelUsed = 'dall-e-3'
+    
+    const fallbackResponse = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'dall-e-3',
+        prompt: enhancedPrompt,
+        n: 1,
+        size: '1792x1024',
+        quality: 'hd'
+      })
+    })
+
+    if (!fallbackResponse.ok) {
+      throw new Error(`Both gpt-image-1 and dall-e-3 failed. dall-e-3 error: ${fallbackResponse.statusText}`)
+    }
+
+    imageData = await fallbackResponse.json()
   }
 
-  const imageData = await imageResponse.json()
   return {
     imageUrl: imageData.data[0].url,
     enhancedPrompt,
-    revisedPrompt: imageData.data[0].revised_prompt
+    revisedPrompt: imageData.data[0].revised_prompt || enhancedPrompt,
+    modelUsed
   }
 }
 
@@ -179,33 +210,43 @@ async function processVideoJob(inputData: any) {
         messages: [
           {
             role: 'system',
-            content: 'You are an expert at creating prompts for AI video generation. Create a prompt that describes motion and animation for a DJ visual.'
+            content: 'You are an expert at creating prompts for AI video generation. Create a prompt that describes motion and animation for abstract background visuals. IMPORTANT: Do not include any DJs, stages, performers, or people in the visual. Focus on abstract motion, colors, patterns, and atmospheric elements.'
           },
           {
             role: 'user',
-            content: `Create a video generation prompt for this DJ visual:
+            content: `Create a video generation prompt for this abstract background visual (no people, no DJ, no stage):
             Track: ${trackName}
             BPM: ${bpm}
             Phase: ${phase}
             Style: ${style}
             Base description: ${prompt}
             
-            Focus on motion, rhythm, and dynamic elements that sync with the music.`
+            Focus on abstract motion, rhythm, and dynamic visual elements that sync with the music tempo.`
           }
         ],
         temperature: 0.7,
-        max_tokens: 200
+        max_tokens: 150
       })
     })
 
     if (enhanceResponse.ok) {
       const enhanceData = await enhanceResponse.json()
       videoPrompt = enhanceData.choices[0].message.content
+      
+      // Ensure prompt is under 1000 characters for Runway ML
+      if (videoPrompt.length > 1000) {
+        videoPrompt = videoPrompt.substring(0, 997) + '...'
+      }
     }
   }
 
-  // Call Runway ML API
-  const runwayResponse = await fetch('https://api.runwayml.com/v1/image_to_video', {
+  // Ensure the video prompt is under 1000 characters as a final check
+  if (videoPrompt.length > 1000) {
+    videoPrompt = videoPrompt.substring(0, 997) + '...'
+  }
+
+  // Call Runway ML API with proper endpoint
+  const runwayResponse = await fetch('https://api.dev.runwayml.com/v1/image_to_video', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -222,13 +263,50 @@ async function processVideoJob(inputData: any) {
   })
 
   if (!runwayResponse.ok) {
-    throw new Error(`Runway API error: ${runwayResponse.statusText}`)
+    const errorText = await runwayResponse.text()
+    throw new Error(`Runway API error: ${runwayResponse.statusText} - ${errorText}`)
   }
 
   const runwayData = await runwayResponse.json()
+  
+  // Now we need to poll for the task completion
+  let taskId = runwayData.id
+  let videoUrl = null
+  let attempts = 0
+  const maxAttempts = 180 // 15 minutes with 5-second intervals
+  
+  while (attempts < maxAttempts) {
+    await new Promise(resolve => setTimeout(resolve, 5000)) // Wait 5 seconds
+    
+    const statusResponse = await fetch(`https://api.dev.runwayml.com/v1/tasks/${taskId}`, {
+      headers: {
+        'Authorization': `Bearer ${RUNWAY_API_KEY}`,
+        'X-Runway-Version': '2024-11-06'
+      }
+    })
+    
+    if (statusResponse.ok) {
+      const statusData = await statusResponse.json()
+      
+      if (statusData.status === 'SUCCEEDED') {
+        videoUrl = statusData.output?.[0]?.url
+        break
+      } else if (statusData.status === 'FAILED') {
+        throw new Error(`Runway task failed: ${statusData.failure?.message || 'Unknown error'}`)
+      }
+    }
+    
+    attempts++
+  }
+  
+  if (!videoUrl) {
+    throw new Error('Video generation timed out')
+  }
+
   return {
-    taskId: runwayData.id,
-    status: 'processing',
+    taskId,
+    videoUrl,
+    status: 'completed',
     videoPrompt
   }
 }
