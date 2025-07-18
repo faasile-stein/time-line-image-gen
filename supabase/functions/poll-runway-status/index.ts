@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
     
     if (statusData.status === 'SUCCEEDED') {
       // Update the job with the completed video URL
-      const videoUrl = statusData.output?.[0]?.url
+      const videoUrl = statusData.output?.[0]  // output is an array of URLs directly
       
       await supabaseClient
         .from('jobs')
