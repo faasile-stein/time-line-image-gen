@@ -89,6 +89,7 @@ export const supabaseFunctions = {
           }
           
           // Poll Runway ML for status
+          console.log('🔍 Calling poll-runway-status with:', { taskId, jobId })
           const { data, error } = await supabase.functions.invoke('poll-runway-status', {
             body: { taskId, jobId }
           })

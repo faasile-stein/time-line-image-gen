@@ -328,12 +328,14 @@ Deno.serve(async (req) => {
       }
 
       // Update job with results
+      // For video jobs, keep them in processing state until polling completes them
+      const isVideoJob = job.type === 'generate-video'
       await supabaseClient
         .from('jobs')
         .update({
-          status: 'completed',
+          status: isVideoJob ? 'processing' : 'completed',
           output_data: result,
-          completed_at: new Date().toISOString()
+          completed_at: isVideoJob ? null : new Date().toISOString()
         })
         .eq('id', jobId)
 

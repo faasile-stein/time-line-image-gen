@@ -15,7 +15,7 @@ Deno.serve(async (req) => {
   try {
     const { taskId, jobId } = await req.json()
     
-    console.log('Poll Runway Status called with:', { taskId, jobId })
+    console.log('🎬 Poll Runway Status called with:', { taskId, jobId })
     
     const RUNWAY_API_KEY = Deno.env.get('RUNWAY_API_KEY')
     const supabaseClient = createClient(
