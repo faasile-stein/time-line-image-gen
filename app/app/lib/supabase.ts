@@ -9,8 +9,8 @@ export interface Job {
   jobId: string;
   type: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
-  inputData: any;
-  outputData?: any;
+  inputData: Record<string, unknown>;
+  outputData?: Record<string, unknown>;
   errorMessage?: string;
   createdAt: string;
   updatedAt: string;
@@ -19,7 +19,7 @@ export interface Job {
 
 export const supabaseFunctions = {
   // Job management functions
-  async createJob(jobType: 'get-styles' | 'get-track-info' | 'generate-image' | 'generate-video', inputData: any) {
+  async createJob(jobType: 'get-styles' | 'get-track-info' | 'generate-image' | 'generate-video', inputData: Record<string, unknown>) {
     const { data, error } = await supabase.functions.invoke('manage-jobs', {
       body: { action: 'create', jobType, inputData }
     })
@@ -129,13 +129,16 @@ export const supabaseFunctions = {
     
     // Poll for completion
     const job = await this.pollJobStatus(jobId)
-    return job.outputData.styles as string[]
+    return job.outputData?.styles as string[] || []
   },
 
   async getTrackInfo(trackName: string, style: string) {
     const { jobId } = await this.createJob('get-track-info', { trackName, style })
     this.processJob(jobId).catch(console.error)
     const job = await this.pollJobStatus(jobId)
+    if (!job.outputData) {
+      throw new Error('Failed to get track info')
+    }
     return job.outputData as { bpm: number; phases: string[] }
   },
 
@@ -143,6 +146,9 @@ export const supabaseFunctions = {
     const { jobId } = await this.createJob('generate-image', { prompt, regenerate })
     this.processJob(jobId).catch(console.error)
     const job = await this.pollJobStatus(jobId, onUpdate)
+    if (!job.outputData) {
+      throw new Error('Failed to generate image')
+    }
     return job.outputData as { imageUrl: string; enhancedPrompt: string; revisedPrompt: string }
   },
 
@@ -158,12 +164,37 @@ export const supabaseFunctions = {
     const { jobId } = await this.createJob('generate-video', { imageUrl, prompt, trackName, bpm, phase, style })
     this.processJob(jobId).catch(console.error)
     
-    // First, wait for the job to start processing and get the task ID
-    const initialJob = await this.pollJobStatus(jobId, onUpdate)
-    const taskId = initialJob.outputData.taskId
+    // Wait for the job to have output data (task ID) but not necessarily be completed
+    let taskId: string | null = null
+    const maxWaitAttempts = 30 // 1 minute max wait for task ID
+    let attempts = 0
     
-    // Then use special video polling that checks Runway ML directly
+    while (!taskId && attempts < maxWaitAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 2000)) // Wait 2 seconds
+      const job = await this.getJobStatus(jobId)
+      onUpdate?.(job)
+      
+      if (job.outputData?.taskId) {
+        taskId = job.outputData.taskId as string
+        break
+      }
+      
+      if (job.status === 'failed') {
+        throw new Error(job.errorMessage || 'Video generation failed to start')
+      }
+      
+      attempts++
+    }
+    
+    if (!taskId) {
+      throw new Error('Failed to get Runway ML task ID')
+    }
+    
+    // Now use special video polling that checks Runway ML directly
     const job = await this.pollVideoStatus(jobId, taskId, onUpdate)
+    if (!job.outputData) {
+      throw new Error('Failed to generate video')
+    }
     return job.outputData as { taskId: string; videoUrl: string; status: string; videoPrompt: string }
   }
 }

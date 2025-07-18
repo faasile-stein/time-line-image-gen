@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Music, Sparkles, Palette, Loader2, Image as ImageIcon, Video, Clock, CheckCircle } from 'lucide-react';
+import Image from 'next/image';
 import { supabaseFunctions, Job } from '../lib/supabase';
 
 type Phase = 'intro' | 'buildup' | 'drop' | 'breakdown' | 'outro';
@@ -351,11 +352,12 @@ export default function Home() {
                   </button>
                 </div>
                 {generatedImage && (
-                  <div className="aspect-video bg-muted rounded-lg overflow-hidden">
-                    <img
+                  <div className="aspect-video bg-muted rounded-lg overflow-hidden relative">
+                    <Image
                       src={generatedImage}
                       alt="Generated visual"
-                      className="w-full h-full object-cover"
+                      fill
+                      className="object-cover"
                     />
                   </div>
                 )}

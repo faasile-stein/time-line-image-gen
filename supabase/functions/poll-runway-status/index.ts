@@ -15,6 +15,8 @@ Deno.serve(async (req) => {
   try {
     const { taskId, jobId } = await req.json()
     
+    console.log('Poll Runway Status called with:', { taskId, jobId })
+    
     const RUNWAY_API_KEY = Deno.env.get('RUNWAY_API_KEY')
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -34,6 +36,8 @@ Deno.serve(async (req) => {
     }
 
     const statusData = await statusResponse.json()
+    
+    console.log('Runway ML status response:', statusData)
     
     if (statusData.status === 'SUCCEEDED') {
       // Update the job with the completed video URL
